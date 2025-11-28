@@ -14,6 +14,29 @@ const MODEL_MAP: Record<string, string> = {
 };
 
 /**
+ * Default disallowed tools for parallel task execution
+ * These commands block other parallel tasks and should use single-file alternatives
+ *
+ * Disallowed:                    Use instead:
+ * - npm run build               → npx tsc --noEmit [file]
+ * - npm run dev                 → (not needed for testing)
+ * - npm test                    → npx vitest run [test-file]
+ * - npm run test:run            → npx vitest run [test-file]
+ * - npm run lint                → npx eslint [file]
+ * - npx tsc -b                  → npx tsc --noEmit [file]
+ * - npx eslint .                → npx eslint [file]
+ */
+const DEFAULT_DISALLOWED_TOOLS: string[] = [
+  'Bash(npm run build:*)',
+  'Bash(npm run dev:*)',
+  'Bash(npm test:*)',
+  'Bash(npm run test:run:*)',
+  'Bash(npm run lint:*)',
+  'Bash(npx tsc -b:*)',
+  'Bash(npx eslint .:*)',
+];
+
+/**
  * Map model name to Claude CLI format
  */
 export function mapModelName(model: ClaudeModel | string): string {
@@ -66,11 +89,13 @@ export function buildClaudeArgs(options: ClaudeCliOptions): string[] {
     }
   }
 
-  // Disallowed tools
-  if (options.disallowedTools?.length) {
-    for (const tool of options.disallowedTools) {
-      args.push('--disallowedTools', tool);
-    }
+  // Disallowed tools (merge with defaults)
+  const allDisallowedTools = new Set([
+    ...DEFAULT_DISALLOWED_TOOLS,
+    ...(options.disallowedTools || []),
+  ]);
+  for (const tool of allDisallowedTools) {
+    args.push('--disallowedTools', tool);
   }
 
   // Additional directories
