@@ -52,7 +52,7 @@ class McpClient {
           this.pendingRequests.delete(response.id);
           pending.resolve(response);
         }
-      } catch (e) {
+      } catch (_e) {
         console.error('Failed to parse response:', line);
       }
     });
