@@ -90,6 +90,8 @@ function parseToolArguments(args: ClaudeToolArguments): ClaudeCliOptions {
     disallowedTools: args.disallowedTools,
     addDirs: args.addDirs,
     verbose: args.verbose ?? false,
+    enableMcp: args.enableMcp ?? false,
+    mcpConfigPath: args.mcpConfigPath,
   };
 }
 

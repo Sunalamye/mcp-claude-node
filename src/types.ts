@@ -74,6 +74,10 @@ export interface ClaudeToolArguments {
   disallowedTools?: string[];
   addDirs?: string[];
   verbose?: boolean;
+  /** Enable MCP servers in subprocess (passes --mcp-config) */
+  enableMcp?: boolean;
+  /** Custom MCP config path (default: auto-detect project .mcp.json) */
+  mcpConfigPath?: string;
 }
 
 export interface ClaudeCliOptions {
@@ -89,6 +93,10 @@ export interface ClaudeCliOptions {
   disallowedTools?: string[];
   addDirs?: string[];
   verbose: boolean;
+  /** Enable MCP servers in subprocess */
+  enableMcp?: boolean;
+  /** Custom MCP config path */
+  mcpConfigPath?: string;
 }
 
 export interface ClaudeExecutionResult {

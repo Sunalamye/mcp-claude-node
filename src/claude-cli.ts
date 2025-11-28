@@ -1,6 +1,59 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ClaudeModel, ClaudeCliOptions, ClaudeExecutionResult } from './types.js';
 import { log, sleep } from './utils.js';
+
+/**
+ * Maximum recursion depth for MCP subprocess calls
+ * Prevents infinite recursion when subprocess calls MCP which spawns another subprocess
+ */
+const MAX_MCP_DEPTH = 3;
+
+/**
+ * Environment variable name for tracking MCP recursion depth
+ */
+const MCP_DEPTH_ENV = 'MCP_CLAUDE_DEPTH';
+
+/**
+ * Get current MCP recursion depth from environment
+ */
+export function getCurrentMcpDepth(): number {
+  const depth = process.env[MCP_DEPTH_ENV];
+  return depth ? parseInt(depth, 10) : 0;
+}
+
+/**
+ * Check if MCP can be enabled (not exceeding max depth)
+ */
+export function canEnableMcp(): boolean {
+  return getCurrentMcpDepth() < MAX_MCP_DEPTH;
+}
+
+/**
+ * Find MCP config file in project directory
+ * Searches for .mcp.json in current directory and parent directories
+ */
+export function findMcpConfig(startDir: string = process.cwd()): string | null {
+  let currentDir = resolve(startDir);
+  const root = resolve('/');
+
+  while (currentDir !== root) {
+    const mcpJsonPath = resolve(currentDir, '.mcp.json');
+    if (existsSync(mcpJsonPath)) {
+      return mcpJsonPath;
+    }
+
+    const claudeMcpPath = resolve(currentDir, '.claude', 'mcp.json');
+    if (existsSync(claudeMcpPath)) {
+      return claudeMcpPath;
+    }
+
+    currentDir = resolve(currentDir, '..');
+  }
+
+  return null;
+}
 
 // Model name mapping (Updated: 2025-11)
 const MODEL_MAP: Record<string, string> = {
@@ -110,6 +163,22 @@ export function buildClaudeArgs(options: ClaudeCliOptions): string[] {
     args.push('--verbose');
   }
 
+  // MCP configuration for subprocess
+  if (options.enableMcp) {
+    const currentDepth = getCurrentMcpDepth();
+    if (currentDepth >= MAX_MCP_DEPTH) {
+      log(`WARNING: MCP depth limit reached (${currentDepth}/${MAX_MCP_DEPTH}), disabling MCP for subprocess`);
+    } else {
+      const mcpConfigPath = options.mcpConfigPath || findMcpConfig();
+      if (mcpConfigPath) {
+        args.push('--mcp-config', mcpConfigPath);
+        log(`MCP config enabled: ${mcpConfigPath} (depth: ${currentDepth + 1}/${MAX_MCP_DEPTH})`);
+      } else {
+        log('WARNING: enableMcp=true but no MCP config file found');
+      }
+    }
+  }
+
   return args;
 }
 
@@ -119,7 +188,8 @@ export function buildClaudeArgs(options: ClaudeCliOptions): string[] {
 export function executeClaudeCli(
   prompt: string,
   args: string[],
-  timeoutMs: number
+  timeoutMs: number,
+  enableMcp: boolean = false
 ): Promise<ClaudeExecutionResult> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
@@ -129,8 +199,17 @@ export function executeClaudeCli(
     log(`Executing: claude ${args.join(' ')}`);
     log(`Prompt preview: ${prompt.substring(0, 100)}...`);
 
+    // Build environment with incremented MCP depth
+    const env = { ...process.env };
+    if (enableMcp) {
+      const currentDepth = getCurrentMcpDepth();
+      env[MCP_DEPTH_ENV] = String(currentDepth + 1);
+      log(`Setting ${MCP_DEPTH_ENV}=${currentDepth + 1} for subprocess`);
+    }
+
     const proc = spawn('claude', args, {
       stdio: ['pipe', 'pipe', 'pipe'],
+      env,
     });
 
     // Set timeout
@@ -198,11 +277,12 @@ export async function runWithRetry(
 ): Promise<ClaudeExecutionResult> {
   const args = buildClaudeArgs(options);
   const timeoutMs = options.timeout * 1000;
+  const enableMcp = options.enableMcp ?? false;
 
   for (let attempt = 1; attempt <= options.maxRetries; attempt++) {
     log(`Attempt ${attempt}/${options.maxRetries}`);
 
-    const result = await executeClaudeCli(prompt, args, timeoutMs);
+    const result = await executeClaudeCli(prompt, args, timeoutMs, enableMcp);
 
     if (result.success) {
       log(`Success on attempt ${attempt}`);

@@ -57,6 +57,15 @@ const commonProperties = {
     type: 'boolean',
     description: 'Enable verbose logging. Default: false',
   },
+  enableMcp: {
+    type: 'boolean',
+    description:
+      'Enable MCP servers in subprocess, allowing recursive calls. Max depth: 3. Default: false',
+  },
+  mcpConfigPath: {
+    type: 'string',
+    description: 'Custom MCP config path. Default: auto-detect project .mcp.json',
+  },
 };
 
 const jsonToolProperties = {
